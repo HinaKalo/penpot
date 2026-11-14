@@ -139,37 +139,37 @@
   [out old new path]
   (let [sets (volatile! nil)
         adds (volatile! nil)
-        dels (volatile! nil)]
+        dels (volatile! nil)
 
-    ;; One pass classifies every key and recurses into the ones that
-    ;; hold a nested change. A local operation and a nested group never
-    ;; target the same key, so their relative order does not matter.
-    (let [out (reduce-kv
-               (fn [out k old-val]
-                 (if-let [entry (find new k)]
-                   (let [new-val (val entry)]
-                     (cond
-                       (= old-val new-val)
-                       out
+        ;; One pass classifies every key and recurses into the ones that
+        ;; hold a nested change. A local operation and a nested group never
+        ;; target the same key, so their relative order does not matter.
+        out  (reduce-kv
+              (fn [out k old-val]
+                (if-let [entry (find new k)]
+                  (let [new-val (val entry)]
+                    (cond
+                      (= old-val new-val)
+                      out
 
-                       (containers? old-val new-val)
-                       (emit-groups out old-val new-val (conj path k))
+                      (containers? old-val new-val)
+                      (emit-groups out old-val new-val (conj path k))
 
-                       :else
-                       (do (add-op sets [k new-val]) out)))
-                   (do (add-op dels k) out)))
-               out
-               old)]
+                      :else
+                      (do (add-op sets [k new-val]) out)))
+                  (do (add-op dels k) out)))
+              out
+              old)]
 
-      (reduce-kv
-       (fn [out k new-val]
-         (if (contains? old k)
-           out
-           (do (add-op adds [k new-val]) out)))
-       out
-       new)
+    (reduce-kv
+     (fn [out k new-val]
+       (if (contains? old k)
+         out
+         (do (add-op adds [k new-val]) out)))
+     out
+     new)
 
-      (emit-local-ops out path sets adds dels))))
+    (emit-local-ops out path sets adds dels)))
 
 (defn- common-prefix-length
   [old new ^long limit]
@@ -192,56 +192,57 @@
 
 (defn- emit-vector-groups
   [out old new path]
-  (let [old-count (count old)
-        new-count (count new)
-        limit     (min old-count new-count)
+  (let [old-count    (count old)
+        new-count    (count new)
+        limit        (min old-count new-count)
         ^long prefix (common-prefix-length old new limit)
         ^long suffix (common-suffix-length old new (- limit prefix))
 
-        old-size  (- old-count suffix prefix)
-        new-size  (- new-count suffix prefix)
-        shared    (min old-size new-size)
+        old-size     (- old-count suffix prefix)
+        new-size     (- new-count suffix prefix)
+        shared       (min old-size new-size)
 
-        sets (volatile! nil)]
+        sets         (volatile! nil)
 
-    ;; One pass handles both the replacements and the nested changes:
-    ;; they target different indices, so their relative order is free.
-    (let [out (reduce
-               (fn [out idx]
-                 (let [abs-idx (+ prefix idx)
-                       old-val (nth old abs-idx)
-                       new-val (nth new abs-idx)]
-                   (cond
-                     (= old-val new-val)
-                     out
+        ;; One pass handles both the replacements and the nested changes:
+        ;; they target different indices, so their relative order is free.
+        out          (reduce
+                      (fn [out idx]
+                        (let [abs-idx (+ prefix idx)
+                              old-val (nth old abs-idx)
+                              new-val (nth new abs-idx)]
+                          (cond
+                            (= old-val new-val)
+                            out
 
-                     (containers? old-val new-val)
-                     (emit-groups out old-val new-val (conj path abs-idx))
+                            (containers? old-val new-val)
+                            (emit-groups out old-val new-val (conj path abs-idx))
 
-                     :else
-                     (do (add-op sets [abs-idx new-val]) out))))
-               out
-               (range shared))
+                            :else
+                            (do (add-op sets [abs-idx new-val]) out))))
+                      out
+                      (range shared))
 
-          ndels (- old-size shared)
-          nadds (- new-size shared)
+        ndels        (- old-size shared)
+        nadds        (- new-size shared)
 
-          dels (when (pos? ndels)
-                 (mapv #(+ prefix %)
-                       (range (dec old-size) (dec shared) -1)))
+        dels         (when (pos? ndels)
+                       (mapv #(+ prefix %)
+                             (range (dec old-size) (dec shared) -1)))
 
-          adds (when (pos? nadds)
-                 (mapv (fn [idx]
-                         (let [abs-idx (+ prefix idx)]
-                           [abs-idx (nth new abs-idx)]))
-                       (range shared new-size)))]
+        adds         (when (pos? nadds)
+                       (mapv (fn [idx]
+                               (let [abs-idx (+ prefix idx)]
+                                 [abs-idx (nth new abs-idx)]))
+                             (range shared new-size)))
 
-      ;; Removals and additions go last: they shift every index after
-      ;; them, so every other operation must already be applied.
-      (let [out (emit-local-ops out path sets nil nil)]
-        (emit-local-ops out path nil
-                        (when adds (volatile! adds))
-                        (when dels (volatile! dels)))))))
+        out          (emit-local-ops out path sets nil nil)]
+
+    ;; Removals and additions go last: they shift every index after
+    ;; them, so every other operation must already be applied.
+    (emit-local-ops out path nil
+                    (when adds (volatile! adds))
+                    (when dels (volatile! dels)))))
 
 (defn- emit-groups
   "Appends the elements that turn `old` into `new` under `path`.
