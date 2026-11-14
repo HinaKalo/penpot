@@ -17,6 +17,7 @@
    [common-tests.buffer-test]
    [common-tests.colors-test]
    [common-tests.data-test]
+   [common-tests.data.object-diff-test]
    [common-tests.exceptions-test]
    [common-tests.files-builder-test]
    [common-tests.files-changes-test]
@@ -133,6 +134,7 @@
    'common-tests.buffer-test
    'common-tests.colors-test
    'common-tests.data-test
+   'common-tests.data.object-diff-test
    'common-tests.exceptions-test
    'common-tests.files-builder-test
    #?(:cljs 'common-tests.fonts-test)
