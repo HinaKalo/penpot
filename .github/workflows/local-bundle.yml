@@ -1,0 +1,37 @@
+name: Local Bundle
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        type: string
+        default: '2.19.1'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df -h /
+      - name: Build bundle
+        env:
+          BUILD_WASM: 'no'
+          BUILD_STORYBOOK: 'no'
+        run: ./manage.sh build-bundle
+      - name: Package
+        run: |
+          mv bundles penpot
+          tar -czf penpot-bundle.tar.gz penpot
+          ls -lh penpot-bundle.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: penpot-bundle
+          path: penpot-bundle.tar.gz
+          retention-days: 7
